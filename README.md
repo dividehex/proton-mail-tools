@@ -63,7 +63,7 @@ touches Bridge or its sync.
 ## Quick start (standalone)
 
 ```bash
-git clone <this repo> proton-mail-tools && cd proton-mail-tools
+git clone https://github.com/dividehex/proton-mail-tools.git proton-mail-tools && cd proton-mail-tools
 cp .env.example .env
 # set PROTON_TOOLS_API_KEY (openssl rand -hex 32) and PROTON_BRIDGE_USERNAME (your Proton address)
 
@@ -103,7 +103,7 @@ runs your stack. The steps assume a layout like
 1. **Check out the repo** inside the stack directory:
 
    ```bash
-   cd ~/ai && git clone <this repo> proton-mail-tools
+   cd ~/ai && git clone https://github.com/dividehex/proton-mail-tools.git proton-mail-tools
    ```
 
 2. **Add the services.** Paste the two services from
