@@ -224,6 +224,22 @@ func (s *IMAPStore) Remove(_ context.Context, mailbox string, uids []uint32) err
 	})
 }
 
+// AllUIDs returns every uid in mailbox.
+func (s *IMAPStore) AllUIDs(_ context.Context, mailbox string) ([]uint32, error) {
+	var out []uint32
+	err := s.withMailbox(mailbox, true, func(c *imapclient.Client) error {
+		data, err := c.UIDSearch(&imap.SearchCriteria{}, nil).Wait()
+		if err != nil {
+			return fmt.Errorf("search all: %w", err)
+		}
+		for _, uid := range data.AllUIDs() {
+			out = append(out, uint32(uid))
+		}
+		return nil
+	})
+	return out, err
+}
+
 func requireMailbox(c *imapclient.Client, name string) error {
 	found, err := c.List("", name, nil).Collect()
 	if err != nil {

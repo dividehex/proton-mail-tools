@@ -29,7 +29,8 @@ running headless in a container next to the tools.
 | `move_messages`        | Move to any existing folder |
 | `archive_messages`     | Move to Archive |
 | `label_messages` / `unlabel_messages` | Add / remove a Proton label (additive tag; the message stays in its folder) |
-| `trash_messages`       | Move to Trash (the delete operation) |
+| `trash_messages`       | Move to Trash (reversible delete for INBOX, folders, labels) |
+| `delete_messages` / `empty_mailbox` | Permanent deletion — **Spam and Trash only**, off unless `ALLOW_PURGE=true` |
 
 `GET /health` and `GET /openapi.json` are unauthenticated support endpoints and are not
 exposed as tools.
@@ -127,7 +128,8 @@ runs your stack. The steps assume a layout like
    ```
 
    Optional: `PROTON_MAIL_FROM_ADDRESS` / `PROTON_MAIL_FROM_NAME` to send from an alias,
-   `PROTON_TOOLS_ALLOW_SEND=false` / `PROTON_TOOLS_ALLOW_DELETE=false` to restrict the agent.
+   `PROTON_TOOLS_ALLOW_SEND=false` / `PROTON_TOOLS_ALLOW_DELETE=false` to restrict the agent,
+   `PROTON_TOOLS_ALLOW_PURGE=true` to let it empty Spam/Trash permanently.
 
 4. **Log Bridge in** (once):
 
@@ -192,6 +194,7 @@ variables in `.env`).
 | `MAIL_FROM_NAME` | *(empty)* | From display name |
 | `ALLOW_SEND` | `true` | Gate `send_message` / `reply_to_message` (403 when false) |
 | `ALLOW_DELETE` | `true` | Gate `trash_messages` (403 when false) |
+| `ALLOW_PURGE` | `false` | Gate `delete_messages` / `empty_mailbox` — permanent deletion in Spam and Trash |
 | `MAX_BODY_CHARS` | `20000` | Truncate long bodies for the model |
 | `SEARCH_DEFAULT_LIMIT` | `20` | Results when `limit` is omitted |
 | `SEARCH_MAX_LIMIT` | `100` | Hard cap on `limit` |
@@ -210,7 +213,10 @@ variables in `.env`).
   with the bearer key.
 - TLS verification towards Bridge is skipped because Bridge issues a self-signed
   certificate and the connection never leaves the container's loopback.
-- Deleting is always "move to Trash"; nothing is expunged. Bridge itself, however,
+- With the default `ALLOW_PURGE=false`, deleting is always "move to Trash" and nothing is
+  expunged. Enabling it adds `delete_messages` / `empty_mailbox`, which are irreversible
+  but accept only the Spam and Trash mailboxes — the two places where Proton's own
+  "Delete" is permanent — so the model cannot purge INBOX or a folder. Bridge itself, however,
   permanently deletes a message that is moved into Trash or Spam while it is already
   there — easy to trigger on Proton because one message can be in several mailboxes
   (INBOX and Sent for self-addressed mail, INBOX and a label). `trash_messages` and

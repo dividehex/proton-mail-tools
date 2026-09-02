@@ -21,6 +21,7 @@ type Options struct {
 	From         mail.Address
 	AllowSend    bool
 	AllowDelete  bool
+	AllowPurge   bool
 	MaxBodyChars int
 	DefaultLimit int
 	MaxLimit     int
@@ -177,6 +178,52 @@ func (s *Service) Move(ctx context.Context, mailbox string, uids []uint32, desti
 		return MoveResult{}, err
 	}
 	return MoveResult{Destination: destination, Moved: uids}, nil
+}
+
+// Delete permanently removes messages. Only Spam and Trash allow it, matching
+// Proton's own semantics; elsewhere callers must use Trash.
+func (s *Service) Delete(ctx context.Context, mailbox string, uids []uint32) (int, error) {
+	if err := requireMessages(mailbox, uids); err != nil {
+		return 0, err
+	}
+	if err := s.requirePurgeable(ctx, mailbox); err != nil {
+		return 0, err
+	}
+	return len(uids), s.store.Remove(ctx, mailbox, uids)
+}
+
+// Empty permanently removes every message in a Spam or Trash mailbox.
+func (s *Service) Empty(ctx context.Context, mailbox string) (int, error) {
+	if mailbox == "" {
+		return 0, fmt.Errorf("%w: mailbox is required", mail.ErrInvalidInput)
+	}
+	if err := s.requirePurgeable(ctx, mailbox); err != nil {
+		return 0, err
+	}
+	uids, err := s.store.AllUIDs(ctx, mailbox)
+	if err != nil {
+		return 0, err
+	}
+	if len(uids) == 0 {
+		return 0, nil
+	}
+	return len(uids), s.store.Remove(ctx, mailbox, uids)
+}
+
+// requirePurgeable enforces the purge gate and restricts permanent deletion to
+// the mailboxes where Proton itself deletes permanently.
+func (s *Service) requirePurgeable(ctx context.Context, mailbox string) error {
+	if !s.opts.AllowPurge {
+		return fmt.Errorf("%w: permanent deletion (ALLOW_PURGE)", ErrDisabled)
+	}
+	purge, err := s.isPurgeMailbox(ctx, mailbox)
+	if err != nil {
+		return err
+	}
+	if !purge {
+		return fmt.Errorf("%w: permanent deletion is only allowed in Spam or Trash; use trash_messages for %q", mail.ErrInvalidInput, mailbox)
+	}
+	return nil
 }
 
 // Archive moves messages into the archive mailbox.

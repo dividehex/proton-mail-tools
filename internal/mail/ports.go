@@ -12,8 +12,11 @@ type Store interface {
 	// Copy adds messages to destination without removing them from mailbox
 	// (on Proton this applies a label when destination is a label).
 	Copy(ctx context.Context, mailbox string, uids []uint32, destination string) error
-	// Remove expunges messages from mailbox only (on Proton: removes that label).
+	// Remove expunges messages from mailbox only (on Proton: removes that label;
+	// in Trash or Spam this deletes the message permanently).
 	Remove(ctx context.Context, mailbox string, uids []uint32) error
+	// AllUIDs lists every message uid in mailbox.
+	AllUIDs(ctx context.Context, mailbox string) ([]uint32, error)
 }
 
 // Sender submits an outgoing message for delivery (the SMTP side).

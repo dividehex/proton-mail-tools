@@ -40,6 +40,7 @@ func main() {
 		From:         mail.Address{Name: cfg.FromName, Email: cfg.FromAddress},
 		AllowSend:    cfg.AllowSend,
 		AllowDelete:  cfg.AllowDelete,
+		AllowPurge:   cfg.AllowPurge,
 		MaxBodyChars: cfg.MaxBodyChars,
 		DefaultLimit: cfg.DefaultSearchLimit,
 		MaxLimit:     cfg.MaxSearchLimit,
@@ -59,7 +60,7 @@ func main() {
 
 	go func() {
 		log.Info("listening", "addr", cfg.ListenAddr, "imap", cfg.IMAPAddr, "smtp", cfg.SMTPAddr,
-			"allow_send", cfg.AllowSend, "allow_delete", cfg.AllowDelete)
+			"allow_send", cfg.AllowSend, "allow_delete", cfg.AllowDelete, "allow_purge", cfg.AllowPurge)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("server", "err", err)
 			os.Exit(1)

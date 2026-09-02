@@ -148,11 +148,43 @@
         }
       }
     },
+    "/messages/delete": {
+      "post": {
+        "operationId": "delete_messages",
+        "summary": "Permanently delete messages (Spam and Trash only)",
+        "description": "Permanently and irreversibly delete one or more messages. Only allowed for messages in the Spam or Trash mailbox, matching Proton's own behaviour; for any other mailbox use trash_messages instead. Confirm with the user before calling this. Returns 403 if permanent deletion is disabled by configuration.",
+        "tags": ["mail"],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MessagesRef"}}}},
+        "responses": {
+          "200": {"description": "Deleted", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DeleteResponse"}}}},
+          "400": {"$ref": "#/components/responses/Error"},
+          "403": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
+    "/mailboxes/empty": {
+      "post": {
+        "operationId": "empty_mailbox",
+        "summary": "Permanently delete every message in Spam or Trash",
+        "description": "Empty the Spam or Trash mailbox, permanently deleting all messages in it. Not allowed for any other mailbox. Confirm with the user before calling this. Returns 403 if permanent deletion is disabled by configuration.",
+        "tags": ["mail"],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {
+          "type": "object",
+          "properties": {"mailbox": {"type": "string", "description": "'Spam' or 'Trash' (exact name from list_mailboxes)"}},
+          "required": ["mailbox"]
+        }}}},
+        "responses": {
+          "200": {"description": "Emptied", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DeleteResponse"}}}},
+          "400": {"$ref": "#/components/responses/Error"},
+          "403": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
     "/messages/trash": {
       "post": {
         "operationId": "trash_messages",
         "summary": "Move messages to Trash",
-        "description": "Move one or more messages to the Trash mailbox. This is the delete operation; confirm with the user before calling it. Messages that are already in Trash (for example reached through another label) are skipped and reported in skipped_uids rather than deleted permanently.",
+        "description": "Move one or more messages to the Trash mailbox (reversible; Proton purges Trash after 30 days). Use this to delete mail from INBOX, folders and labels; confirm with the user before calling it. Messages that are already in Trash (for example reached through another label) are skipped and reported in skipped_uids. For messages already in Spam or Trash, use delete_messages or empty_mailbox instead.",
         "tags": ["mail"],
         "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MessagesRef"}}}},
         "responses": {
@@ -312,6 +344,14 @@
           "destination": {"type": "string", "description": "Exact name of an existing mailbox to move into"}
         },
         "required": ["mailbox", "uids", "destination"]
+      },
+      "DeleteResponse": {
+        "type": "object",
+        "properties": {
+          "status": {"type": "string"},
+          "mailbox": {"type": "string"},
+          "deleted": {"type": "integer", "description": "Messages permanently deleted"}
+        }
       },
       "LabelRequest": {
         "type": "object",

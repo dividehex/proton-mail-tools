@@ -189,6 +189,36 @@ func (s *server) trashMessages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, moveResponse(res))
 }
 
+func (s *server) deleteMessages(w http.ResponseWriter, r *http.Request) {
+	var req messagesRef
+	if err := decodeJSON(r, &req); err != nil {
+		writeFailure(w, err)
+		return
+	}
+	n, err := s.svc.Delete(r.Context(), req.Mailbox, req.UIDs)
+	if err != nil {
+		writeFailure(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "mailbox": req.Mailbox, "deleted": n})
+}
+
+func (s *server) emptyMailbox(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Mailbox string `json:"mailbox"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeFailure(w, err)
+		return
+	}
+	n, err := s.svc.Empty(r.Context(), req.Mailbox)
+	if err != nil {
+		writeFailure(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "mailbox": req.Mailbox, "deleted": n})
+}
+
 func (s *server) archiveMessages(w http.ResponseWriter, r *http.Request) {
 	var req messagesRef
 	if err := decodeJSON(r, &req); err != nil {

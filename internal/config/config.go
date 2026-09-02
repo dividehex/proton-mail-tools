@@ -23,6 +23,7 @@ type Config struct {
 
 	AllowSend   bool
 	AllowDelete bool
+	AllowPurge  bool
 
 	MaxBodyChars       int
 	DefaultSearchLimit int
@@ -53,6 +54,9 @@ func FromEnv() (Config, error) {
 		return cfg, err
 	}
 	if cfg.AllowDelete, err = envBool("ALLOW_DELETE", true); err != nil {
+		return cfg, err
+	}
+	if cfg.AllowPurge, err = envBool("ALLOW_PURGE", false); err != nil {
 		return cfg, err
 	}
 

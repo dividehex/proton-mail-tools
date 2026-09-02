@@ -47,6 +47,14 @@ func (f *fakeStore) Remove(_ context.Context, mailbox string, uids []uint32) err
 	return nil
 }
 
+func (f *fakeStore) AllUIDs(_ context.Context, mailbox string) ([]uint32, error) {
+	var out []uint32
+	for _, sum := range f.contents[mailbox] {
+		out = append(out, sum.UID)
+	}
+	return out, nil
+}
+
 func (f *fakeStore) Search(_ context.Context, q mail.Query) ([]mail.Summary, error) {
 	var out []mail.Summary
 	for _, sum := range f.contents[q.Mailbox] {
@@ -81,7 +89,34 @@ func (f *fakeSender) Send(_ context.Context, m mail.Outgoing) error {
 var me = mail.Address{Name: "Me", Email: "me@example.com"}
 
 func newService(store *fakeStore, sender *fakeSender, allowSend, allowDelete bool) *Service {
-	return New(store, sender, Options{From: me, AllowSend: allowSend, AllowDelete: allowDelete, MaxBodyChars: 10, DefaultLimit: 5, MaxLimit: 10}, nil)
+	return New(store, sender, Options{From: me, AllowSend: allowSend, AllowDelete: allowDelete, AllowPurge: allowDelete, MaxBodyChars: 10, DefaultLimit: 5, MaxLimit: 10}, nil)
+}
+
+func TestPermanentDeleteRestrictedToSpamAndTrash(t *testing.T) {
+	store := &fakeStore{boxes: systemBoxes, contents: map[string][]mail.Summary{
+		"Spam":  {{UID: 1}, {UID: 2}, {UID: 3}},
+		"INBOX": {{UID: 9}},
+	}}
+	svc := newService(store, &fakeSender{}, true, true)
+	ctx := context.Background()
+
+	if n, err := svc.Delete(ctx, "Spam", []uint32{1, 2}); err != nil || n != 2 || len(store.removed) != 2 || store.removed[0] != "Spam:1" {
+		t.Fatalf("delete in Spam: n=%d err=%v removed=%v", n, err, store.removed)
+	}
+	if _, err := svc.Delete(ctx, "INBOX", []uint32{9}); !errors.Is(err, mail.ErrInvalidInput) || len(store.removed) != 2 {
+		t.Fatalf("delete outside Spam/Trash must be rejected, got %v removed=%v", err, store.removed)
+	}
+	if n, err := svc.Empty(ctx, "Spam"); err != nil || n != 3 || len(store.removed) != 5 {
+		t.Fatalf("empty Spam: n=%d err=%v removed=%v", n, err, store.removed)
+	}
+	if _, err := svc.Empty(ctx, "Archive"); !errors.Is(err, mail.ErrInvalidInput) {
+		t.Fatalf("empty outside Spam/Trash must be rejected, got %v", err)
+	}
+
+	gated := newService(store, &fakeSender{}, true, false)
+	if _, err := gated.Delete(ctx, "Spam", []uint32{3}); !errors.Is(err, ErrDisabled) {
+		t.Fatalf("ALLOW_PURGE=false should disable, got %v", err)
+	}
 }
 
 func TestBuildReply(t *testing.T) {

@@ -57,6 +57,8 @@ services:
 
       ALLOW_SEND: ${PROTON_TOOLS_ALLOW_SEND:-true}
       ALLOW_DELETE: ${PROTON_TOOLS_ALLOW_DELETE:-true}
+      # Permanent deletion (delete_messages / empty_mailbox in Spam and Trash). Off by default.
+      ALLOW_PURGE: ${PROTON_TOOLS_ALLOW_PURGE:-false}
 
       MAX_BODY_CHARS: "20000"
       SEARCH_DEFAULT_LIMIT: "20"

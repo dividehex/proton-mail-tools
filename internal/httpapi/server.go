@@ -77,6 +77,8 @@ func (s *server) routes() []route {
 		{"POST", "/messages/archive", s.archiveMessages, false},
 		{"POST", "/messages/label", s.labelMessages, false},
 		{"POST", "/messages/unlabel", s.unlabelMessages, false},
+		{"POST", "/messages/delete", s.deleteMessages, false},
+		{"POST", "/mailboxes/empty", s.emptyMailbox, false},
 	}
 }
 
