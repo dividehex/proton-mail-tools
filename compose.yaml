@@ -1,0 +1,51 @@
+# Standalone run: cp .env.example .env, fill it in, then `docker compose up -d --build`.
+# First time only (and never while proton-bridge is running):
+#   docker compose stop proton-mail-tools proton-bridge
+#   docker compose run --rm -it proton-bridge init      # `login`, then `info` for the Bridge password
+#   docker compose up -d
+services:
+  proton-bridge:
+    build:
+      context: ./bridge
+    image: proton-bridge:3.26.0
+    container_name: proton-bridge
+    restart: unless-stopped
+    # PROTON_BRIDGE_HOME defaults to /root. Set it to the desktop user's home
+    # (e.g. /home/alice) only when migrating an existing desktop Bridge: the vault
+    # stores absolute paths, so the volume must be mounted where they resolve.
+    environment:
+      HOME: ${PROTON_BRIDGE_HOME:-/root}
+    volumes:
+      - proton-bridge-data:${PROTON_BRIDGE_HOME:-/root}
+    # The tool service shares this network namespace, so its port is published here.
+    ports:
+      - "127.0.0.1:8930:8930"
+
+  proton-mail-tools:
+    build:
+      context: .
+    container_name: proton-mail-tools
+    restart: unless-stopped
+    # Share Bridge's loopback: IMAP/SMTP never leave the container.
+    network_mode: "service:proton-bridge"
+    depends_on:
+      - proton-bridge
+
+    environment:
+      LISTEN_ADDR: ":8930"
+      API_KEY: ${PROTON_TOOLS_API_KEY}
+
+      BRIDGE_IMAP_ADDR: 127.0.0.1:1143
+      BRIDGE_SMTP_ADDR: 127.0.0.1:1025
+      BRIDGE_USERNAME: ${PROTON_BRIDGE_USERNAME}
+      BRIDGE_PASSWORD: ${PROTON_BRIDGE_PASSWORD}
+      BRIDGE_TLS_SKIP_VERIFY: "true"
+
+      MAIL_FROM_ADDRESS: ${PROTON_MAIL_FROM_ADDRESS:-}
+      MAIL_FROM_NAME: ${PROTON_MAIL_FROM_NAME:-}
+
+      ALLOW_SEND: ${PROTON_TOOLS_ALLOW_SEND:-true}
+      ALLOW_DELETE: ${PROTON_TOOLS_ALLOW_DELETE:-true}
+
+volumes:
+  proton-bridge-data:

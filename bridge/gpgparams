@@ -1,0 +1,6 @@
+%no-protection
+Key-Type: RSA
+Key-Length: 2048
+Name-Real: pass-key
+Expire-Date: 0
+%commit

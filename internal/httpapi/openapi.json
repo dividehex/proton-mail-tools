@@ -1,0 +1,299 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Proton Mail Tools",
+    "version": "0.1.0",
+    "description": "Tools for reading, searching, sending and organising email in a Proton Mail account via Proton Mail Bridge. Messages are identified by a mailbox name plus a numeric uid returned by search_messages."
+  },
+  "security": [{"bearerAuth": []}],
+  "paths": {
+    "/mailboxes": {
+      "get": {
+        "operationId": "list_mailboxes",
+        "summary": "List mailboxes",
+        "description": "List every mailbox (folder or label) in the account with its role (inbox, sent, trash, archive, spam, drafts, starred, all) and message counts. Use the exact 'name' value as the 'mailbox' argument for other tools.",
+        "tags": ["mail"],
+        "responses": {
+          "200": {
+            "description": "Mailboxes",
+            "content": {"application/json": {"schema": {
+              "type": "object",
+              "properties": {"mailboxes": {"type": "array", "items": {"$ref": "#/components/schemas/Mailbox"}}}
+            }}}
+          }
+        }
+      }
+    },
+    "/messages/search": {
+      "post": {
+        "operationId": "search_messages",
+        "summary": "Search messages",
+        "description": "Search one mailbox (default INBOX) and return the newest matching messages first. All filters are optional and combine with AND. Returns summaries only; call read_message with the mailbox and uid to get the body.",
+        "tags": ["mail"],
+        "requestBody": {"required": false, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SearchRequest"}}}},
+        "responses": {
+          "200": {
+            "description": "Matching messages, newest first",
+            "content": {"application/json": {"schema": {
+              "type": "object",
+              "properties": {
+                "count": {"type": "integer"},
+                "messages": {"type": "array", "items": {"$ref": "#/components/schemas/MessageSummary"}}
+              }
+            }}}
+          }
+        }
+      }
+    },
+    "/messages/read": {
+      "post": {
+        "operationId": "read_message",
+        "summary": "Read a message",
+        "description": "Fetch the full content of one message: headers, plain-text body (HTML is converted to text), the hyperlinks found in the HTML body, List-Unsubscribe URLs, and attachment metadata. Reading does not mark the message as read; use update_message_flags for that.",
+        "tags": ["mail"],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MessageRef"}}}},
+        "responses": {
+          "200": {"description": "The message", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Message"}}}},
+          "404": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
+    "/messages/send": {
+      "post": {
+        "operationId": "send_message",
+        "summary": "Send a new email",
+        "description": "Compose and send a new plain-text email from the account owner. Confirm recipients, subject and body with the user before calling this.",
+        "tags": ["mail"],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SendRequest"}}}},
+        "responses": {
+          "200": {"description": "Sent", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SentResponse"}}}},
+          "403": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
+    "/messages/reply": {
+      "post": {
+        "operationId": "reply_to_message",
+        "summary": "Reply to a message",
+        "description": "Send a reply to an existing message. Recipients, subject and threading headers are derived from the original automatically; supply only the reply body. Set reply_all to include everyone on the original thread.",
+        "tags": ["mail"],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ReplyRequest"}}}},
+        "responses": {
+          "200": {"description": "Sent", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/SentResponse"}}}},
+          "403": {"$ref": "#/components/responses/Error"},
+          "404": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
+    "/messages/flags": {
+      "post": {
+        "operationId": "update_message_flags",
+        "summary": "Mark messages read/unread or flagged/unflagged",
+        "description": "Set the read and/or flagged (starred) state of one or more messages in a mailbox. Omit a field to leave it unchanged.",
+        "tags": ["mail"],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FlagsRequest"}}}},
+        "responses": {
+          "200": {"description": "Updated", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StatusResponse"}}}}
+        }
+      }
+    },
+    "/messages/move": {
+      "post": {
+        "operationId": "move_messages",
+        "summary": "Move messages to another mailbox",
+        "description": "Move one or more messages into an existing mailbox, e.g. 'Archive' or 'Folders/Receipts'. Use list_mailboxes to find valid destination names.",
+        "tags": ["mail"],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MoveRequest"}}}},
+        "responses": {
+          "200": {"description": "Moved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StatusResponse"}}}},
+          "404": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
+    "/messages/trash": {
+      "post": {
+        "operationId": "trash_messages",
+        "summary": "Move messages to Trash",
+        "description": "Move one or more messages to the Trash mailbox. This is the delete operation; confirm with the user before calling it. Messages that are already in Trash (for example reached through another label) are skipped and reported in skipped_uids rather than deleted permanently.",
+        "tags": ["mail"],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MessagesRef"}}}},
+        "responses": {
+          "200": {"description": "Trashed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StatusResponse"}}}},
+          "403": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {"type": "http", "scheme": "bearer"}
+    },
+    "responses": {
+      "Error": {
+        "description": "Error",
+        "content": {"application/json": {"schema": {"type": "object", "properties": {"error": {"type": "string"}}}}}
+      }
+    },
+    "schemas": {
+      "Address": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string", "description": "Display name, if any"},
+          "email": {"type": "string", "description": "Email address"}
+        },
+        "required": ["email"]
+      },
+      "Mailbox": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string", "description": "Exact mailbox name to pass to other tools"},
+          "role": {"type": "string", "description": "System role: inbox, sent, drafts, trash, archive, spam, starred, all; empty for custom folders and labels"},
+          "total_messages": {"type": "integer"},
+          "unread_messages": {"type": "integer"}
+        },
+        "required": ["name"]
+      },
+      "MessageSummary": {
+        "type": "object",
+        "properties": {
+          "mailbox": {"type": "string"},
+          "uid": {"type": "integer", "description": "Message id within the mailbox; pass with the mailbox to other tools"},
+          "date": {"type": "string", "format": "date-time"},
+          "from": {"type": "array", "items": {"$ref": "#/components/schemas/Address"}},
+          "to": {"type": "array", "items": {"$ref": "#/components/schemas/Address"}},
+          "subject": {"type": "string"},
+          "message_id": {"type": "string", "description": "RFC 5322 Message-ID without angle brackets"},
+          "read": {"type": "boolean"},
+          "flagged": {"type": "boolean"},
+          "answered": {"type": "boolean"},
+          "has_attachments": {"type": "boolean"},
+          "size_bytes": {"type": "integer"}
+        }
+      },
+      "Message": {
+        "allOf": [
+          {"$ref": "#/components/schemas/MessageSummary"},
+          {
+            "type": "object",
+            "properties": {
+              "cc": {"type": "array", "items": {"$ref": "#/components/schemas/Address"}},
+              "reply_to": {"type": "array", "items": {"$ref": "#/components/schemas/Address"}},
+              "in_reply_to": {"type": "string"},
+              "references": {"type": "array", "items": {"type": "string"}},
+              "list_unsubscribe": {"type": "array", "items": {"type": "string"}, "description": "URLs (https or mailto) from the List-Unsubscribe header, if the sender provides one-click unsubscribe"},
+              "body": {"type": "string", "description": "Plain-text body"},
+              "body_truncated": {"type": "boolean", "description": "True when the body was cut to the configured maximum length"},
+              "links": {"type": "array", "items": {"$ref": "#/components/schemas/Link"}, "description": "Hyperlinks from the HTML body with their anchor text (first 50)"},
+              "attachments": {"type": "array", "items": {"$ref": "#/components/schemas/Attachment"}}
+            }
+          }
+        ]
+      },
+      "Link": {
+        "type": "object",
+        "properties": {
+          "text": {"type": "string", "description": "Anchor text"},
+          "url": {"type": "string"}
+        }
+      },
+      "Attachment": {
+        "type": "object",
+        "properties": {
+          "filename": {"type": "string"},
+          "content_type": {"type": "string"},
+          "size_bytes": {"type": "integer"}
+        }
+      },
+      "SearchRequest": {
+        "type": "object",
+        "properties": {
+          "mailbox": {"type": "string", "description": "Mailbox to search. Defaults to INBOX.", "default": "INBOX"},
+          "query": {"type": "string", "description": "Free-text search across headers and body"},
+          "from": {"type": "string", "description": "Substring to match in the From header (name or address)"},
+          "to": {"type": "string", "description": "Substring to match in the To header"},
+          "subject": {"type": "string", "description": "Substring to match in the Subject header"},
+          "since": {"type": "string", "description": "Only messages received on or after this date, YYYY-MM-DD"},
+          "before": {"type": "string", "description": "Only messages received before this date, YYYY-MM-DD"},
+          "unread_only": {"type": "boolean", "description": "Only return unread messages", "default": false},
+          "limit": {"type": "integer", "description": "Maximum number of messages to return (newest first). Default 20.", "default": 20}
+        }
+      },
+      "MessageRef": {
+        "type": "object",
+        "properties": {
+          "mailbox": {"type": "string", "description": "Mailbox containing the message"},
+          "uid": {"type": "integer", "description": "Message uid from search_messages"}
+        },
+        "required": ["mailbox", "uid"]
+      },
+      "MessagesRef": {
+        "type": "object",
+        "properties": {
+          "mailbox": {"type": "string", "description": "Mailbox containing the messages"},
+          "uids": {"type": "array", "items": {"type": "integer"}, "description": "One or more message uids from search_messages"}
+        },
+        "required": ["mailbox", "uids"]
+      },
+      "SendRequest": {
+        "type": "object",
+        "properties": {
+          "to": {"type": "array", "items": {"type": "string"}, "description": "Recipient addresses, e.g. 'alice@example.com' or 'Alice <alice@example.com>'"},
+          "cc": {"type": "array", "items": {"type": "string"}},
+          "bcc": {"type": "array", "items": {"type": "string"}},
+          "subject": {"type": "string"},
+          "body": {"type": "string", "description": "Plain-text body"}
+        },
+        "required": ["to", "subject", "body"]
+      },
+      "ReplyRequest": {
+        "type": "object",
+        "properties": {
+          "mailbox": {"type": "string", "description": "Mailbox containing the original message"},
+          "uid": {"type": "integer", "description": "Uid of the original message"},
+          "body": {"type": "string", "description": "Plain-text reply body (the original is not quoted automatically)"},
+          "reply_all": {"type": "boolean", "description": "Reply to all original recipients instead of just the sender", "default": false}
+        },
+        "required": ["mailbox", "uid", "body"]
+      },
+      "FlagsRequest": {
+        "type": "object",
+        "properties": {
+          "mailbox": {"type": "string"},
+          "uids": {"type": "array", "items": {"type": "integer"}},
+          "read": {"type": "boolean", "description": "true = mark read, false = mark unread, omit = unchanged"},
+          "flagged": {"type": "boolean", "description": "true = star/flag, false = unflag, omit = unchanged"}
+        },
+        "required": ["mailbox", "uids"]
+      },
+      "MoveRequest": {
+        "type": "object",
+        "properties": {
+          "mailbox": {"type": "string", "description": "Mailbox the messages are currently in"},
+          "uids": {"type": "array", "items": {"type": "integer"}},
+          "destination": {"type": "string", "description": "Exact name of an existing mailbox to move into"}
+        },
+        "required": ["mailbox", "uids", "destination"]
+      },
+      "SentResponse": {
+        "type": "object",
+        "properties": {
+          "status": {"type": "string"},
+          "from": {"$ref": "#/components/schemas/Address"},
+          "to": {"type": "array", "items": {"$ref": "#/components/schemas/Address"}},
+          "cc": {"type": "array", "items": {"$ref": "#/components/schemas/Address"}},
+          "subject": {"type": "string"}
+        }
+      },
+      "StatusResponse": {
+        "type": "object",
+        "properties": {
+          "status": {"type": "string"},
+          "updated": {"type": "integer", "description": "Messages whose flags were changed"},
+          "moved": {"type": "integer", "description": "Messages actually moved"},
+          "skipped_uids": {"type": "array", "items": {"type": "integer"}, "description": "Uids left untouched because they were already in the destination"},
+          "destination": {"type": "string"}
+        }
+      }
+    }
+  }
+}
