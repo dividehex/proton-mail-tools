@@ -12,6 +12,9 @@ running headless in a container next to the tools.
   Bridge quirk that would otherwise turn "move to Trash" into a permanent delete.
 - **Model-friendly output** — HTML bodies converted to text, bodies truncated to a
   configurable size, newest-first search, stable `mailbox` + `uid` message references.
+- **Proton-aware organising** — folders vs. labels are distinguished (`kind` in
+  `list_mailboxes`), labels are applied additively, starring maps to `flagged`, and
+  archive/trash resolve the right system mailbox by role.
 
 ## Tools
 
@@ -23,7 +26,9 @@ running headless in a container next to the tools.
 | `send_message`         | New plain-text email (to/cc/bcc) |
 | `reply_to_message`     | Threaded reply — recipients, subject and `In-Reply-To`/`References` derived from the original; marks it answered |
 | `update_message_flags` | Mark read/unread and flagged/unflagged, one or many uids |
-| `move_messages`        | Move to any existing mailbox |
+| `move_messages`        | Move to any existing folder |
+| `archive_messages`     | Move to Archive |
+| `label_messages` / `unlabel_messages` | Add / remove a Proton label (additive tag; the message stays in its folder) |
 | `trash_messages`       | Move to Trash (the delete operation) |
 
 `GET /health` and `GET /openapi.json` are unauthenticated support endpoints and are not
@@ -223,6 +228,12 @@ variables in `.env`).
   are stripped from the body text but reported separately in `links` (first 50, with
   anchor text), and `List-Unsubscribe` header URLs in `list_unsubscribe`, so the agent can
   find e.g. an unsubscribe link.
+- Organising: `move_messages` for folders (a Proton message lives in exactly one folder),
+  `label_messages`/`unlabel_messages` for labels (additive; a message can carry many),
+  `update_message_flags` with `flagged` for Proton's star, `archive_messages` /
+  `trash_messages` for the system mailboxes. All of them look the message up by
+  `Message-ID` in the destination first and report already-present / absent uids in
+  `skipped_uids`.
 - `reply_to_message` replies to `Reply-To`/`From` (or to the original recipients when the
   original is your own message); `reply_all` adds the other recipients as Cc, excluding
   yourself. The original is not quoted. Bridge files sent mail into *Sent* itself.

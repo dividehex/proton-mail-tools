@@ -62,6 +62,14 @@ func TestParseBodyFallsBackToHTML(t *testing.T) {
 	}
 }
 
+func TestKindOf(t *testing.T) {
+	for name, want := range map[string]string{"INBOX": mail.KindSystem, "Folders/Work": mail.KindFolder, "Labels/Receipts": mail.KindLabel, "Trash": mail.KindSystem} {
+		if got := kindOf(name); got != want {
+			t.Errorf("kindOf(%q) = %q want %q", name, got, want)
+		}
+	}
+}
+
 func TestRoleOf(t *testing.T) {
 	if got := roleOf("INBOX", nil); got != mail.RoleInbox {
 		t.Fatalf("INBOX role = %q", got)

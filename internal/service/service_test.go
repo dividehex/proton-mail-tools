@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"proton-mail-tools/internal/mail"
@@ -14,6 +15,8 @@ type fakeStore struct {
 	flagged  []mail.FlagUpdate
 	moved    []string
 	movedUID []uint32
+	copied   []string // "dest:uid"
+	removed  []string // "mailbox:uid"
 	boxes    []mail.Mailbox
 	// contents maps mailbox name to the summaries it holds, for Search.
 	contents map[string][]mail.Summary
@@ -27,6 +30,20 @@ func (f *fakeStore) UpdateFlags(_ context.Context, _ string, _ []uint32, u mail.
 func (f *fakeStore) Move(_ context.Context, _ string, uids []uint32, dest string) error {
 	f.moved = append(f.moved, dest)
 	f.movedUID = append(f.movedUID, uids...)
+	return nil
+}
+
+func (f *fakeStore) Copy(_ context.Context, _ string, uids []uint32, dest string) error {
+	for _, u := range uids {
+		f.copied = append(f.copied, fmt.Sprintf("%s:%d", dest, u))
+	}
+	return nil
+}
+
+func (f *fakeStore) Remove(_ context.Context, mailbox string, uids []uint32) error {
+	for _, u := range uids {
+		f.removed = append(f.removed, fmt.Sprintf("%s:%d", mailbox, u))
+	}
 	return nil
 }
 
@@ -123,7 +140,56 @@ func TestPermissionGates(t *testing.T) {
 	}
 }
 
-var systemBoxes = []mail.Mailbox{{Name: "INBOX", Role: mail.RoleInbox}, {Name: "Trash", Role: mail.RoleTrash}, {Name: "Spam", Role: mail.RoleSpam}, {Name: "Archive", Role: mail.RoleArchive}}
+var systemBoxes = []mail.Mailbox{
+	{Name: "INBOX", Kind: mail.KindSystem, Role: mail.RoleInbox}, {Name: "Trash", Kind: mail.KindSystem, Role: mail.RoleTrash},
+	{Name: "Spam", Kind: mail.KindSystem, Role: mail.RoleSpam}, {Name: "Archive", Kind: mail.KindSystem, Role: mail.RoleArchive},
+	{Name: "Labels/Receipts", Kind: mail.KindLabel}, {Name: "Folders/Work", Kind: mail.KindFolder},
+}
+
+func TestArchive(t *testing.T) {
+	store := &fakeStore{boxes: systemBoxes, contents: map[string][]mail.Summary{
+		"INBOX":   {{UID: 1, MessageID: "a@x"}, {UID: 2, MessageID: "b@x"}},
+		"Archive": {{UID: 9, MessageID: "b@x"}},
+	}}
+	svc := newService(store, &fakeSender{}, true, true)
+
+	res, err := svc.Archive(context.Background(), "INBOX", []uint32{1, 2})
+	if err != nil || res.Destination != "Archive" || len(res.Moved) != 1 || res.Moved[0] != 1 || len(res.Skipped) != 1 || res.Skipped[0] != 2 {
+		t.Fatalf("expected uid 1 archived and 2 skipped, got %+v err=%v", res, err)
+	}
+}
+
+func TestLabelAndUnlabel(t *testing.T) {
+	store := &fakeStore{boxes: systemBoxes, contents: map[string][]mail.Summary{
+		"INBOX":           {{UID: 1, MessageID: "a@x"}, {UID: 2, MessageID: "b@x"}},
+		"Labels/Receipts": {{UID: 40, MessageID: "b@x"}},
+	}}
+	svc := newService(store, &fakeSender{}, true, true)
+	ctx := context.Background()
+
+	res, err := svc.Label(ctx, "INBOX", []uint32{1, 2}, "Receipts")
+	if err != nil || res.Label != "Labels/Receipts" || len(res.Affected) != 1 || res.Affected[0] != 1 || len(res.Skipped) != 1 || res.Skipped[0] != 2 {
+		t.Fatalf("label: expected uid 1 copied and 2 skipped, got %+v err=%v", res, err)
+	}
+	if len(store.copied) != 1 || store.copied[0] != "Labels/Receipts:1" {
+		t.Fatalf("store copies = %v", store.copied)
+	}
+
+	res, err = svc.Unlabel(ctx, "INBOX", []uint32{1, 2}, "Labels/Receipts")
+	if err != nil || len(res.Affected) != 1 || res.Affected[0] != 2 || len(res.Skipped) != 1 || res.Skipped[0] != 1 {
+		t.Fatalf("unlabel: expected uid 2 removed and 1 skipped, got %+v err=%v", res, err)
+	}
+	if len(store.removed) != 1 || store.removed[0] != "Labels/Receipts:40" {
+		t.Fatalf("store should remove the label-mailbox uid 40, got %v", store.removed)
+	}
+
+	if _, err := svc.Label(ctx, "INBOX", []uint32{1}, "Folders/Work"); !errors.Is(err, mail.ErrMailboxNotFound) {
+		t.Fatalf("folders must not be accepted as labels, got %v", err)
+	}
+	if _, err := svc.Label(ctx, "INBOX", []uint32{1}, ""); !errors.Is(err, mail.ErrInvalidInput) {
+		t.Fatalf("empty label should be invalid, got %v", err)
+	}
+}
 
 func TestTrashResolvesRole(t *testing.T) {
 	store := &fakeStore{boxes: systemBoxes, contents: map[string][]mail.Summary{

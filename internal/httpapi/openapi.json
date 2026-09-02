@@ -11,7 +11,7 @@
       "get": {
         "operationId": "list_mailboxes",
         "summary": "List mailboxes",
-        "description": "List every mailbox (folder or label) in the account with its role (inbox, sent, trash, archive, spam, drafts, starred, all) and message counts. Use the exact 'name' value as the 'mailbox' argument for other tools.",
+        "description": "List every mailbox in the account with its kind (system, folder, or label), role (inbox, sent, trash, archive, spam, drafts, starred, all) and message counts. Folders hold a message exclusively (use move_messages); labels are additive tags (use label_messages). Use the exact 'name' value as the 'mailbox' argument for other tools.",
         "tags": ["mail"],
         "responses": {
           "200": {
@@ -88,8 +88,8 @@
     "/messages/flags": {
       "post": {
         "operationId": "update_message_flags",
-        "summary": "Mark messages read/unread or flagged/unflagged",
-        "description": "Set the read and/or flagged (starred) state of one or more messages in a mailbox. Omit a field to leave it unchanged.",
+        "summary": "Mark messages read/unread or starred/unstarred",
+        "description": "Set the read and/or starred state of one or more messages in a mailbox. 'flagged' is Proton's star: flagged=true stars a message (it appears under Starred), flagged=false unstars it. Omit a field to leave it unchanged.",
         "tags": ["mail"],
         "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/FlagsRequest"}}}},
         "responses": {
@@ -106,6 +106,44 @@
         "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MoveRequest"}}}},
         "responses": {
           "200": {"description": "Moved", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StatusResponse"}}}},
+          "404": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
+    "/messages/archive": {
+      "post": {
+        "operationId": "archive_messages",
+        "summary": "Archive messages",
+        "description": "Move one or more messages out of their current mailbox into Archive. Messages already in Archive are reported in skipped_uids.",
+        "tags": ["mail"],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MessagesRef"}}}},
+        "responses": {
+          "200": {"description": "Archived", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/StatusResponse"}}}}
+        }
+      }
+    },
+    "/messages/label": {
+      "post": {
+        "operationId": "label_messages",
+        "summary": "Apply a label (tag) to messages",
+        "description": "Add a Proton label to one or more messages. Labels are additive tags: the message stays where it is and also appears under 'Labels/<name>'. Use list_mailboxes to see existing labels (kind = label); the label may be given as 'Receipts' or 'Labels/Receipts'. Messages that already have the label are reported in skipped_uids.",
+        "tags": ["mail"],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/LabelRequest"}}}},
+        "responses": {
+          "200": {"description": "Labeled", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/LabelResponse"}}}},
+          "404": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
+    "/messages/unlabel": {
+      "post": {
+        "operationId": "unlabel_messages",
+        "summary": "Remove a label (tag) from messages",
+        "description": "Remove a Proton label from one or more messages, identified by their mailbox and uid (any mailbox they appear in). The messages themselves are not moved or deleted. Messages that do not carry the label are reported in skipped_uids.",
+        "tags": ["mail"],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/LabelRequest"}}}},
+        "responses": {
+          "200": {"description": "Unlabeled", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/LabelResponse"}}}},
           "404": {"$ref": "#/components/responses/Error"}
         }
       }
@@ -147,6 +185,7 @@
         "type": "object",
         "properties": {
           "name": {"type": "string", "description": "Exact mailbox name to pass to other tools"},
+          "kind": {"type": "string", "enum": ["system", "folder", "label"], "description": "system mailboxes (INBOX, Sent, ...), user folders ('Folders/...') or labels ('Labels/...')"},
           "role": {"type": "string", "description": "System role: inbox, sent, drafts, trash, archive, spam, starred, all; empty for custom folders and labels"},
           "total_messages": {"type": "integer"},
           "unread_messages": {"type": "integer"}
@@ -261,7 +300,7 @@
           "mailbox": {"type": "string"},
           "uids": {"type": "array", "items": {"type": "integer"}},
           "read": {"type": "boolean", "description": "true = mark read, false = mark unread, omit = unchanged"},
-          "flagged": {"type": "boolean", "description": "true = star/flag, false = unflag, omit = unchanged"}
+          "flagged": {"type": "boolean", "description": "true = star, false = unstar, omit = unchanged"}
         },
         "required": ["mailbox", "uids"]
       },
@@ -273,6 +312,25 @@
           "destination": {"type": "string", "description": "Exact name of an existing mailbox to move into"}
         },
         "required": ["mailbox", "uids", "destination"]
+      },
+      "LabelRequest": {
+        "type": "object",
+        "properties": {
+          "mailbox": {"type": "string", "description": "Mailbox the messages are listed in"},
+          "uids": {"type": "array", "items": {"type": "integer"}},
+          "label": {"type": "string", "description": "Existing label name, e.g. 'Receipts' or 'Labels/Receipts'"}
+        },
+        "required": ["mailbox", "uids", "label"]
+      },
+      "LabelResponse": {
+        "type": "object",
+        "properties": {
+          "status": {"type": "string"},
+          "label": {"type": "string"},
+          "labeled": {"type": "integer", "description": "Messages the label was added to"},
+          "unlabeled": {"type": "integer", "description": "Messages the label was removed from"},
+          "skipped_uids": {"type": "array", "items": {"type": "integer"}, "description": "Uids left untouched because they already had / did not have the label"}
+        }
       },
       "SentResponse": {
         "type": "object",

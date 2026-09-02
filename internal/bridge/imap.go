@@ -83,7 +83,7 @@ func (s *IMAPStore) ListMailboxes(context.Context) ([]mail.Mailbox, error) {
 			if hasAttr(item.Attrs, imap.MailboxAttrNoSelect) {
 				continue
 			}
-			mb := mail.Mailbox{Name: item.Mailbox, Role: roleOf(item.Mailbox, item.Attrs)}
+			mb := mail.Mailbox{Name: item.Mailbox, Kind: kindOf(item.Mailbox), Role: roleOf(item.Mailbox, item.Attrs)}
 			status := item.Status
 			if status == nil && !listStatus {
 				if status, err = c.Status(item.Mailbox, &imap.StatusOptions{NumMessages: true, NumUnseen: true}).Wait(); err != nil {
@@ -185,18 +185,54 @@ func (s *IMAPStore) Move(_ context.Context, mailbox string, uids []uint32, desti
 		if !c.Caps().Has(imap.CapMove) {
 			return errors.New("bridge IMAP server does not advertise MOVE")
 		}
-		dest, err := c.List("", destination, nil).Collect()
-		if err != nil {
-			return fmt.Errorf("list %q: %w", destination, err)
-		}
-		if len(dest) == 0 {
-			return fmt.Errorf("%w: destination %q", mail.ErrMailboxNotFound, destination)
+		if err := requireMailbox(c, destination); err != nil {
+			return err
 		}
 		if _, err := c.Move(uidSet(uids), destination).Wait(); err != nil {
 			return fmt.Errorf("move to %q: %w", destination, err)
 		}
 		return nil
 	})
+}
+
+// Copy adds messages to destination; Bridge applies the label when destination is one.
+// The source is selected read-write: Bridge refuses COPY from an EXAMINEd mailbox.
+func (s *IMAPStore) Copy(_ context.Context, mailbox string, uids []uint32, destination string) error {
+	return s.withMailbox(mailbox, false, func(c *imapclient.Client) error {
+		if err := requireMailbox(c, destination); err != nil {
+			return err
+		}
+		if _, err := c.Copy(uidSet(uids), destination).Wait(); err != nil {
+			return fmt.Errorf("copy to %q: %w", destination, err)
+		}
+		return nil
+	})
+}
+
+// Remove flags messages deleted and expunges them from mailbox only.
+func (s *IMAPStore) Remove(_ context.Context, mailbox string, uids []uint32) error {
+	return s.withMailbox(mailbox, false, func(c *imapclient.Client) error {
+		set := uidSet(uids)
+		store := &imap.StoreFlags{Op: imap.StoreFlagsAdd, Silent: true, Flags: []imap.Flag{imap.FlagDeleted}}
+		if err := c.Store(set, store, nil).Close(); err != nil {
+			return fmt.Errorf("flag deleted: %w", err)
+		}
+		if err := c.UIDExpunge(set).Close(); err != nil {
+			return fmt.Errorf("expunge from %q: %w", mailbox, err)
+		}
+		return nil
+	})
+}
+
+func requireMailbox(c *imapclient.Client, name string) error {
+	found, err := c.List("", name, nil).Collect()
+	if err != nil {
+		return fmt.Errorf("list %q: %w", name, err)
+	}
+	if len(found) == 0 {
+		return fmt.Errorf("%w: %q", mail.ErrMailboxNotFound, name)
+	}
+	return nil
 }
 
 // newestUIDs narrows uids to the limit most recent by INTERNALDATE. UID order
@@ -324,6 +360,18 @@ var nameRoles = map[string]string{
 	"spam":     mail.RoleSpam,
 	"starred":  mail.RoleStarred,
 	"all mail": mail.RoleAll,
+}
+
+// Bridge exposes custom folders as "Folders/…" and labels as "Labels/…".
+func kindOf(name string) string {
+	switch {
+	case strings.HasPrefix(name, "Folders/"):
+		return mail.KindFolder
+	case strings.HasPrefix(name, "Labels/"):
+		return mail.KindLabel
+	default:
+		return mail.KindSystem
+	}
 }
 
 func roleOf(name string, attrs []imap.MailboxAttr) string {

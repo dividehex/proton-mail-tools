@@ -179,6 +179,133 @@ func (s *Service) Move(ctx context.Context, mailbox string, uids []uint32, desti
 	return MoveResult{Destination: destination, Moved: uids}, nil
 }
 
+// Archive moves messages into the archive mailbox.
+func (s *Service) Archive(ctx context.Context, mailbox string, uids []uint32) (MoveResult, error) {
+	if err := requireMessages(mailbox, uids); err != nil {
+		return MoveResult{}, err
+	}
+	archive, err := s.mailboxByRole(ctx, mail.RoleArchive)
+	if err != nil {
+		return MoveResult{}, err
+	}
+	return s.guardedMove(ctx, mailbox, uids, archive)
+}
+
+// LabelResult reports which messages a label operation touched.
+type LabelResult struct {
+	Label    string
+	Affected []uint32
+	Skipped  []uint32
+}
+
+// Label applies a Proton label to messages; those that already carry it are skipped.
+func (s *Service) Label(ctx context.Context, mailbox string, uids []uint32, label string) (LabelResult, error) {
+	label, err := s.requireLabel(ctx, label)
+	if err != nil {
+		return LabelResult{}, err
+	}
+	if err := requireMessages(mailbox, uids); err != nil {
+		return LabelResult{}, err
+	}
+	present, absent, err := s.partitionByPresence(ctx, mailbox, uids, label)
+	if err != nil {
+		return LabelResult{}, err
+	}
+	result := LabelResult{Label: label, Skipped: present.sourceUIDs()}
+	if len(absent) > 0 {
+		if err := s.store.Copy(ctx, mailbox, absent.sourceUIDs(), label); err != nil {
+			return LabelResult{}, err
+		}
+		result.Affected = absent.sourceUIDs()
+	}
+	return result, nil
+}
+
+// Unlabel removes a Proton label from messages; those without it are skipped.
+func (s *Service) Unlabel(ctx context.Context, mailbox string, uids []uint32, label string) (LabelResult, error) {
+	label, err := s.requireLabel(ctx, label)
+	if err != nil {
+		return LabelResult{}, err
+	}
+	if err := requireMessages(mailbox, uids); err != nil {
+		return LabelResult{}, err
+	}
+	present, absent, err := s.partitionByPresence(ctx, mailbox, uids, label)
+	if err != nil {
+		return LabelResult{}, err
+	}
+	result := LabelResult{Label: label, Skipped: absent.sourceUIDs()}
+	if len(present) > 0 {
+		if err := s.store.Remove(ctx, label, present.targetUIDs()); err != nil {
+			return LabelResult{}, err
+		}
+		result.Affected = present.sourceUIDs()
+	}
+	return result, nil
+}
+
+// requireLabel normalises "Receipts" / "Labels/Receipts" and checks the label exists.
+func (s *Service) requireLabel(ctx context.Context, label string) (string, error) {
+	label = strings.TrimSpace(label)
+	if label == "" {
+		return "", fmt.Errorf("%w: label is required", mail.ErrInvalidInput)
+	}
+	boxes, err := s.store.ListMailboxes(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, mb := range boxes {
+		if mb.Kind == mail.KindLabel && (mb.Name == label || strings.TrimPrefix(mb.Name, "Labels/") == label) {
+			return mb.Name, nil
+		}
+	}
+	return "", fmt.Errorf("%w: no label named %q (use list_mailboxes; labels have kind \"label\")", mail.ErrMailboxNotFound, label)
+}
+
+// presence pairs a message's uid in the source mailbox with its uid in the target, if any.
+type presence struct{ source, target uint32 }
+
+type presences []presence
+
+func (p presences) sourceUIDs() []uint32 {
+	out := make([]uint32, 0, len(p))
+	for _, x := range p {
+		out = append(out, x.source)
+	}
+	return out
+}
+
+func (p presences) targetUIDs() []uint32 {
+	out := make([]uint32, 0, len(p))
+	for _, x := range p {
+		out = append(out, x.target)
+	}
+	return out
+}
+
+// partitionByPresence looks each message up in target by Message-ID and splits
+// the uids into those already present there and those absent.
+func (s *Service) partitionByPresence(ctx context.Context, mailbox string, uids []uint32, target string) (present, absent presences, err error) {
+	summaries, err := s.store.Search(ctx, mail.Query{Mailbox: mailbox, UIDs: uids, Limit: len(uids)})
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, sum := range summaries {
+		if sum.MessageID != "" {
+			found, err := s.store.Search(ctx, mail.Query{Mailbox: target, MessageID: sum.MessageID, Limit: 1})
+			if err != nil {
+				return nil, nil, err
+			}
+			if len(found) > 0 {
+				present = append(present, presence{source: sum.UID, target: found[0].UID})
+				continue
+			}
+		}
+		absent = append(absent, presence{source: sum.UID})
+	}
+	return present, absent, nil
+}
+
 // Trash moves messages into the trash mailbox.
 func (s *Service) Trash(ctx context.Context, mailbox string, uids []uint32) (MoveResult, error) {
 	if !s.opts.AllowDelete {
@@ -199,24 +326,11 @@ func (s *Service) Trash(ctx context.Context, mailbox string, uids []uint32) (Mov
 // it is already there (e.g. the Sent copy of a self-addressed email, or the
 // same message reached through a label), so the skip prevents data loss.
 func (s *Service) guardedMove(ctx context.Context, mailbox string, uids []uint32, destination string) (MoveResult, error) {
-	summaries, err := s.store.Search(ctx, mail.Query{Mailbox: mailbox, UIDs: uids, Limit: len(uids)})
+	present, absent, err := s.partitionByPresence(ctx, mailbox, uids, destination)
 	if err != nil {
 		return MoveResult{}, err
 	}
-	result := MoveResult{Destination: destination}
-	for _, sum := range summaries {
-		if sum.MessageID != "" {
-			present, err := s.store.Search(ctx, mail.Query{Mailbox: destination, MessageID: sum.MessageID, Limit: 1})
-			if err != nil {
-				return MoveResult{}, err
-			}
-			if len(present) > 0 {
-				result.Skipped = append(result.Skipped, sum.UID)
-				continue
-			}
-		}
-		result.Moved = append(result.Moved, sum.UID)
-	}
+	result := MoveResult{Destination: destination, Moved: absent.sourceUIDs(), Skipped: present.sourceUIDs()}
 	if len(result.Moved) > 0 {
 		if err := s.store.Move(ctx, mailbox, result.Moved, destination); err != nil {
 			return MoveResult{}, err

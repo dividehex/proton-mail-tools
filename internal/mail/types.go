@@ -22,9 +22,17 @@ const (
 	RoleAll     = "all"
 )
 
+// Mailbox kinds: Proton folders hold a message exclusively, labels are additive tags.
+const (
+	KindSystem = "system"
+	KindFolder = "folder"
+	KindLabel  = "label"
+)
+
 // Mailbox is an IMAP folder or label. Counts are nil when the server did not report them.
 type Mailbox struct {
 	Name   string  `json:"name"`
+	Kind   string  `json:"kind"`
 	Role   string  `json:"role,omitempty"`
 	Total  *uint32 `json:"total_messages,omitempty"`
 	Unread *uint32 `json:"unread_messages,omitempty"`

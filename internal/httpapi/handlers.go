@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -56,6 +57,11 @@ type flagsRequest struct {
 type moveRequest struct {
 	messagesRef
 	Destination string `json:"destination"`
+}
+
+type labelRequest struct {
+	messagesRef
+	Label string `json:"label"`
 }
 
 func (s *server) listMailboxes(w http.ResponseWriter, r *http.Request) {
@@ -183,16 +189,62 @@ func (s *server) trashMessages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, moveResponse(res))
 }
 
-func moveResponse(res service.MoveResult) map[string]any {
-	skipped := res.Skipped
-	if skipped == nil {
-		skipped = []uint32{}
+func (s *server) archiveMessages(w http.ResponseWriter, r *http.Request) {
+	var req messagesRef
+	if err := decodeJSON(r, &req); err != nil {
+		writeFailure(w, err)
+		return
 	}
+	res, err := s.svc.Archive(r.Context(), req.Mailbox, req.UIDs)
+	if err != nil {
+		writeFailure(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, moveResponse(res))
+}
+
+func (s *server) labelMessages(w http.ResponseWriter, r *http.Request) {
+	s.handleLabel(w, r, s.svc.Label, "labeled")
+}
+
+func (s *server) unlabelMessages(w http.ResponseWriter, r *http.Request) {
+	s.handleLabel(w, r, s.svc.Unlabel, "unlabeled")
+}
+
+type labelOp func(ctx context.Context, mailbox string, uids []uint32, label string) (service.LabelResult, error)
+
+func (s *server) handleLabel(w http.ResponseWriter, r *http.Request, op labelOp, verb string) {
+	var req labelRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeFailure(w, err)
+		return
+	}
+	res, err := op(r.Context(), req.Mailbox, req.UIDs, req.Label)
+	if err != nil {
+		writeFailure(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":       "ok",
+		"label":        res.Label,
+		verb:           len(res.Affected),
+		"skipped_uids": nonNilUIDs(res.Skipped),
+	})
+}
+
+func nonNilUIDs(uids []uint32) []uint32 {
+	if uids == nil {
+		return []uint32{}
+	}
+	return uids
+}
+
+func moveResponse(res service.MoveResult) map[string]any {
 	return map[string]any{
 		"status":       "ok",
 		"destination":  res.Destination,
 		"moved":        len(res.Moved),
-		"skipped_uids": skipped,
+		"skipped_uids": nonNilUIDs(res.Skipped),
 	}
 }
 
