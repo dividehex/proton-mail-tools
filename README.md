@@ -165,10 +165,12 @@ runs your stack. The steps assume a layout like
 
 - **Tool service:** `git pull` then `docker compose up -d --build proton-mail-tools`
   (Bridge keeps running).
-- **Bridge:** bump `BRIDGE_VERSION` in [`bridge/Dockerfile`](bridge/Dockerfile) and
-  `image:` in the compose files, then `docker compose up -d --build proton-bridge
-  proton-mail-tools` (the tool container is recreated because it shares the namespace).
-  Bridge's own auto-updater is irrelevant inside the container.
+- **Bridge:** bump `BRIDGE_VERSION` in [`bridge/Dockerfile`](bridge/Dockerfile), then
+  `docker compose up -d --build proton-bridge proton-mail-tools` (the tool container is
+  recreated because it shares the namespace). Bridge's own auto-updater is irrelevant
+  inside the container.
+- Both images are built locally, so a stack-wide `docker compose pull` reports them as
+  skipped (use `docker compose pull --ignore-buildable` to silence any warning).
 
 ### Backup
 
@@ -255,6 +257,7 @@ variables in `.env`).
 | OpenWebUI shows "Connection error" for the tool server | OpenWebUI and `proton-bridge` are not on the same Docker network, or the alias is missing. Test with `docker exec <openwebui> curl http://proton-mail-tools:8930/health`. |
 | Mailbox counts are low / old mail missing | Initial sync still running: `docker compose logs -f proton-bridge`. |
 | `502 … Message does not exist` on move/trash | The message was removed by another client in between; search again. |
+| `docker compose pull` says `pull access denied for proton-bridge` | Older compose files named the locally built image; remove the `image:` line from the `proton-bridge` service (current files have none) or run `docker compose pull --ignore-buildable`. |
 | Bridge logs `no vault key found, generating new` on start | The `pass` keychain on the volume is missing or was reset; you must `init` → `login` again. |
 
 Bridge writes detailed logs to `<HOME>/.local/share/protonmail/bridge-v3/logs/` on the

@@ -13,7 +13,8 @@ set -euo pipefail
 KEYFILE="${1:?vault key file required}"
 HOST_HOME="${2:-$HOME}"
 VOLUME="${VOLUME:-$(docker compose config --format json | python3 -c 'import json,sys; v=json.load(sys.stdin)["volumes"]["proton-bridge-data"]; print(v.get("name") or "proton-bridge-data")')}"
-IMAGE="$(docker compose config --format json | python3 -c 'import json,sys; print(json.load(sys.stdin)["services"]["proton-bridge"]["image"])')"
+# Build-only services carry no image name in the resolved config; Compose names them <project>-<service>.
+IMAGE="$(docker compose config --format json | python3 -c 'import json,sys; c=json.load(sys.stdin); print(c["services"]["proton-bridge"].get("image") or c["name"]+"-proton-bridge")')"
 CHOME="$(docker compose config --format json | python3 -c 'import json,sys; print(json.load(sys.stdin)["services"]["proton-bridge"]["environment"].get("HOME","/root"))')"
 CONF="$HOST_HOME/.config/protonmail/bridge-v3"
 CACHE="$HOST_HOME/.local/share/protonmail/bridge-v3/gluon"

@@ -17,7 +17,6 @@ services:
   proton-bridge:
     build:
       context: ./proton-mail-tools/bridge
-    image: proton-bridge:3.26.0
     container_name: ai-proton-bridge
     restart: unless-stopped
     # PROTON_BRIDGE_HOME defaults to /root. Set it to the desktop user's home

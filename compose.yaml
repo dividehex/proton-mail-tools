@@ -7,7 +7,6 @@ services:
   proton-bridge:
     build:
       context: ./bridge
-    image: proton-bridge:3.26.0
     container_name: proton-bridge
     restart: unless-stopped
     # PROTON_BRIDGE_HOME defaults to /root. Set it to the desktop user's home
