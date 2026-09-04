@@ -1,7 +1,7 @@
 # Proton Mail Tools for OpenWebUI
 
 Give an OpenWebUI assistant a Proton Mail account: search and read mail, send and reply,
-mark read/flagged, move, and trash — through [Proton Mail Bridge](https://proton.me/mail/bridge)
+mark read/flagged, move, trash, and manage folders and labels — through [Proton Mail Bridge](https://proton.me/mail/bridge)
 running headless in a container next to the tools.
 
 - **OpenAPI tool server** — one operation per tool, imported by OpenWebUI in one click.
@@ -31,6 +31,7 @@ running headless in a container next to the tools.
 | `label_messages` / `unlabel_messages` | Add / remove a Proton label (additive tag; the message stays in its folder) |
 | `trash_messages`       | Move to Trash (reversible delete for INBOX, folders, labels) |
 | `delete_messages` / `empty_mailbox` | Permanent deletion — **Spam and Trash only**, off unless `ALLOW_PURGE=true` |
+| `create_mailbox` / `rename_mailbox` / `delete_mailbox` | Create, rename or delete a folder or label; folders must be empty to delete, system mailboxes are refused |
 
 `GET /health` and `GET /openapi.json` are unauthenticated support endpoints and are not
 exposed as tools.
@@ -156,7 +157,7 @@ runs your stack. The steps assume a layout like
    - URL: `http://proton-mail-tools:8930`
    - Auth: Bearer, value of `PROTON_TOOLS_API_KEY`
 
-   OpenWebUI fetches `/openapi.json` and lists the eight tools. Enable them for a model
+   OpenWebUI fetches `/openapi.json` and lists the tools. Enable them for a model
    (*Workspace → Models → Tools*) or per chat with the `+` button, then ask something like
    *"What unread mail did I get today?"* or *"Reply to the message from Alice saying I'll
    be there."*
@@ -195,7 +196,7 @@ variables in `.env`).
 | `MAIL_FROM_ADDRESS` | `BRIDGE_USERNAME` | From address for outgoing mail (any address on the account) |
 | `MAIL_FROM_NAME` | *(empty)* | From display name |
 | `ALLOW_SEND` | `true` | Gate `send_message` / `reply_to_message` (403 when false) |
-| `ALLOW_DELETE` | `true` | Gate `trash_messages` (403 when false) |
+| `ALLOW_DELETE` | `true` | Gate `trash_messages` and `delete_mailbox` (403 when false) |
 | `ALLOW_PURGE` | `false` | Gate `delete_messages` / `empty_mailbox` — permanent deletion in Spam and Trash |
 | `MAX_BODY_CHARS` | `20000` | Truncate long bodies for the model |
 | `SEARCH_DEFAULT_LIMIT` | `20` | Results when `limit` is omitted |
@@ -242,6 +243,13 @@ variables in `.env`).
   `trash_messages` for the system mailboxes. All of them look the message up by
   `Message-ID` in the destination first and report already-present / absent uids in
   `skipped_uids`.
+- Mailbox management: `create_mailbox` takes a `kind` (`folder` or `label`) and a bare
+  name and returns the exact `Folders/…` / `Labels/…` name; folders may be nested with
+  `/`, labels may not. `rename_mailbox` keeps the kind. `delete_mailbox` removes a label
+  (messages keep their folder) or an **empty** folder; a folder that still holds messages
+  is refused so nothing is moved or deleted implicitly. System mailboxes are never
+  renamed or deleted. Bridge pushes all three to Proton, so the change shows up in the
+  web and mobile apps.
 - `reply_to_message` replies to `Reply-To`/`From` (or to the original recipients when the
   original is your own message); `reply_all` adds the other recipients as Cc, excluding
   yourself. The original is not quoted. Bridge files sent mail into *Sent* itself.

@@ -302,7 +302,7 @@ func (s *Service) requireLabel(ctx context.Context, label string) (string, error
 		return "", err
 	}
 	for _, mb := range boxes {
-		if mb.Kind == mail.KindLabel && (mb.Name == label || strings.TrimPrefix(mb.Name, "Labels/") == label) {
+		if mb.Kind == mail.KindLabel && (mb.Name == label || strings.TrimPrefix(mb.Name, mail.LabelPrefix) == label) {
 			return mb.Name, nil
 		}
 	}

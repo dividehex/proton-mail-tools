@@ -17,6 +17,9 @@ type fakeStore struct {
 	movedUID []uint32
 	copied   []string // "dest:uid"
 	removed  []string // "mailbox:uid"
+	created  []string
+	renamed  []string // "old>new"
+	deleted  []string
 	boxes    []mail.Mailbox
 	// contents maps mailbox name to the summaries it holds, for Search.
 	contents map[string][]mail.Summary
@@ -78,6 +81,21 @@ func containsUID(uids []uint32, uid uint32) bool {
 	return false
 }
 func (f *fakeStore) ListMailboxes(context.Context) ([]mail.Mailbox, error) { return f.boxes, nil }
+
+func (f *fakeStore) CreateMailbox(_ context.Context, name string) error {
+	f.created = append(f.created, name)
+	return nil
+}
+
+func (f *fakeStore) RenameMailbox(_ context.Context, name, newName string) error {
+	f.renamed = append(f.renamed, name+">"+newName)
+	return nil
+}
+
+func (f *fakeStore) DeleteMailbox(_ context.Context, name string) error {
+	f.deleted = append(f.deleted, name)
+	return nil
+}
 
 type fakeSender struct{ sent []mail.Outgoing }
 

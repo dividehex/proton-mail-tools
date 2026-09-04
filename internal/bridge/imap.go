@@ -83,7 +83,7 @@ func (s *IMAPStore) ListMailboxes(context.Context) ([]mail.Mailbox, error) {
 			if hasAttr(item.Attrs, imap.MailboxAttrNoSelect) {
 				continue
 			}
-			mb := mail.Mailbox{Name: item.Mailbox, Kind: kindOf(item.Mailbox), Role: roleOf(item.Mailbox, item.Attrs)}
+			mb := mail.Mailbox{Name: item.Mailbox, Kind: mail.KindOf(item.Mailbox), Role: roleOf(item.Mailbox, item.Attrs)}
 			status := item.Status
 			if status == nil && !listStatus {
 				if status, err = c.Status(item.Mailbox, &imap.StatusOptions{NumMessages: true, NumUnseen: true}).Wait(); err != nil {
@@ -240,6 +240,36 @@ func (s *IMAPStore) AllUIDs(_ context.Context, mailbox string) ([]uint32, error)
 	return out, err
 }
 
+// CreateMailbox creates a folder or label; Bridge pushes it to Proton.
+func (s *IMAPStore) CreateMailbox(_ context.Context, name string) error {
+	return s.withClient(func(c *imapclient.Client) error {
+		if err := c.Create(name, nil).Wait(); err != nil {
+			return fmt.Errorf("create mailbox %q: %w", name, err)
+		}
+		return nil
+	})
+}
+
+// RenameMailbox renames a folder or label in place.
+func (s *IMAPStore) RenameMailbox(_ context.Context, name, newName string) error {
+	return s.withClient(func(c *imapclient.Client) error {
+		if err := c.Rename(name, newName, nil).Wait(); err != nil {
+			return fmt.Errorf("rename mailbox %q to %q: %w", name, newName, err)
+		}
+		return nil
+	})
+}
+
+// DeleteMailbox removes a folder or label from the account.
+func (s *IMAPStore) DeleteMailbox(_ context.Context, name string) error {
+	return s.withClient(func(c *imapclient.Client) error {
+		if err := c.Delete(name).Wait(); err != nil {
+			return fmt.Errorf("delete mailbox %q: %w", name, err)
+		}
+		return nil
+	})
+}
+
 func requireMailbox(c *imapclient.Client, name string) error {
 	found, err := c.List("", name, nil).Collect()
 	if err != nil {
@@ -379,17 +409,6 @@ var nameRoles = map[string]string{
 }
 
 // Bridge exposes custom folders as "Folders/…" and labels as "Labels/…".
-func kindOf(name string) string {
-	switch {
-	case strings.HasPrefix(name, "Folders/"):
-		return mail.KindFolder
-	case strings.HasPrefix(name, "Labels/"):
-		return mail.KindLabel
-	default:
-		return mail.KindSystem
-	}
-}
-
 func roleOf(name string, attrs []imap.MailboxAttr) string {
 	for _, attr := range attrs {
 		if role, ok := specialUseRoles[attr]; ok {

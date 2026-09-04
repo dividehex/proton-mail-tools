@@ -64,6 +64,20 @@ type labelRequest struct {
 	Label string `json:"label"`
 }
 
+type mailboxRef struct {
+	Mailbox string `json:"mailbox"`
+}
+
+type createMailboxRequest struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+}
+
+type renameMailboxRequest struct {
+	mailboxRef
+	NewName string `json:"new_name"`
+}
+
 func (s *server) listMailboxes(w http.ResponseWriter, r *http.Request) {
 	boxes, err := s.svc.ListMailboxes(r.Context())
 	if err != nil {
@@ -204,9 +218,7 @@ func (s *server) deleteMessages(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) emptyMailbox(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Mailbox string `json:"mailbox"`
-	}
+	var req mailboxRef
 	if err := decodeJSON(r, &req); err != nil {
 		writeFailure(w, err)
 		return
@@ -217,6 +229,54 @@ func (s *server) emptyMailbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "mailbox": req.Mailbox, "deleted": n})
+}
+
+func (s *server) createMailbox(w http.ResponseWriter, r *http.Request) {
+	var req createMailboxRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeFailure(w, err)
+		return
+	}
+	mb, err := s.svc.CreateMailbox(r.Context(), req.Kind, req.Name)
+	if err != nil {
+		writeFailure(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, mailboxResponse(mb))
+}
+
+func (s *server) renameMailbox(w http.ResponseWriter, r *http.Request) {
+	var req renameMailboxRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeFailure(w, err)
+		return
+	}
+	mb, err := s.svc.RenameMailbox(r.Context(), req.Mailbox, req.NewName)
+	if err != nil {
+		writeFailure(w, err)
+		return
+	}
+	res := mailboxResponse(mb)
+	res["previous_name"] = req.Mailbox
+	writeJSON(w, http.StatusOK, res)
+}
+
+func (s *server) deleteMailbox(w http.ResponseWriter, r *http.Request) {
+	var req mailboxRef
+	if err := decodeJSON(r, &req); err != nil {
+		writeFailure(w, err)
+		return
+	}
+	mb, err := s.svc.DeleteMailbox(r.Context(), req.Mailbox)
+	if err != nil {
+		writeFailure(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, mailboxResponse(mb))
+}
+
+func mailboxResponse(mb mail.Mailbox) map[string]any {
+	return map[string]any{"status": "ok", "mailbox": mb.Name, "kind": mb.Kind}
 }
 
 func (s *server) archiveMessages(w http.ResponseWriter, r *http.Request) {

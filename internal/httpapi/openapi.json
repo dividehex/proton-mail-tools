@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Proton Mail Tools",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "Tools for reading, searching, sending and organising email in a Proton Mail account via Proton Mail Bridge. Messages are identified by a mailbox name plus a numeric uid returned by search_messages."
   },
   "security": [{"bearerAuth": []}],
@@ -192,6 +192,66 @@
           "403": {"$ref": "#/components/responses/Error"}
         }
       }
+    },
+    "/mailboxes/create": {
+      "post": {
+        "operationId": "create_mailbox",
+        "summary": "Create a folder or label",
+        "description": "Create a new Proton folder (kind 'folder', exclusive location for messages) or label (kind 'label', additive tag). Give the bare name, e.g. 'Receipts'; the tool files it under 'Folders/' or 'Labels/' and returns the exact mailbox name to use with other tools. Folders may be nested with '/', e.g. 'Work/Clients'; labels cannot. Fails if a mailbox with that name already exists.",
+        "tags": ["mail"],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {
+          "type": "object",
+          "properties": {
+            "kind": {"type": "string", "enum": ["folder", "label"], "description": "'folder' or 'label'"},
+            "name": {"type": "string", "description": "Name of the new folder or label, without the 'Folders/' or 'Labels/' prefix"}
+          },
+          "required": ["kind", "name"]
+        }}}},
+        "responses": {
+          "200": {"description": "Created", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MailboxResponse"}}}},
+          "400": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
+    "/mailboxes/rename": {
+      "post": {
+        "operationId": "rename_mailbox",
+        "summary": "Rename a folder or label",
+        "description": "Rename an existing folder or label. 'mailbox' is the exact current name from list_mailboxes (e.g. 'Labels/Receipts'); 'new_name' is the new bare name (e.g. 'Invoices'). The kind cannot change and system mailboxes cannot be renamed. Messages keep the folder or label under its new name.",
+        "tags": ["mail"],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {
+          "type": "object",
+          "properties": {
+            "mailbox": {"type": "string", "description": "Exact current name from list_mailboxes"},
+            "new_name": {"type": "string", "description": "New name, without the 'Folders/' or 'Labels/' prefix"}
+          },
+          "required": ["mailbox", "new_name"]
+        }}}},
+        "responses": {
+          "200": {"description": "Renamed", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MailboxResponse"}}}},
+          "400": {"$ref": "#/components/responses/Error"},
+          "404": {"$ref": "#/components/responses/Error"}
+        }
+      }
+    },
+    "/mailboxes/delete": {
+      "post": {
+        "operationId": "delete_mailbox",
+        "summary": "Delete a folder or label",
+        "description": "Delete a label, or an empty folder. Deleting a label only removes the tag; the messages stay in their folders. A folder that still holds messages is refused: move or trash its messages first. System mailboxes cannot be deleted. Confirm with the user before calling this. Returns 403 if deleting is disabled by configuration.",
+        "tags": ["mail"],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {
+          "type": "object",
+          "properties": {"mailbox": {"type": "string", "description": "Exact name from list_mailboxes, e.g. 'Labels/Old' or 'Folders/Done'"}},
+          "required": ["mailbox"]
+        }}}},
+        "responses": {
+          "200": {"description": "Deleted", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/MailboxResponse"}}}},
+          "400": {"$ref": "#/components/responses/Error"},
+          "403": {"$ref": "#/components/responses/Error"},
+          "404": {"$ref": "#/components/responses/Error"}
+        }
+      }
     }
   },
   "components": {
@@ -344,6 +404,15 @@
           "destination": {"type": "string", "description": "Exact name of an existing mailbox to move into"}
         },
         "required": ["mailbox", "uids", "destination"]
+      },
+      "MailboxResponse": {
+        "type": "object",
+        "properties": {
+          "status": {"type": "string"},
+          "mailbox": {"type": "string", "description": "Exact mailbox name after the operation"},
+          "kind": {"type": "string", "enum": ["folder", "label"]},
+          "previous_name": {"type": "string", "description": "Old name (rename_mailbox only)"}
+        }
       },
       "DeleteResponse": {
         "type": "object",

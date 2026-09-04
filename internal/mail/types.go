@@ -2,7 +2,10 @@
 // message and outgoing email look like, independent of IMAP/SMTP or HTTP.
 package mail
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Address is an RFC 5322 mailbox: an optional display name plus an email address.
 type Address struct {
@@ -28,6 +31,36 @@ const (
 	KindFolder = "folder"
 	KindLabel  = "label"
 )
+
+// Bridge exposes user-created mailboxes under fixed prefixes; everything else is a system mailbox.
+const (
+	FolderPrefix = "Folders/"
+	LabelPrefix  = "Labels/"
+)
+
+// KindOf classifies a mailbox name by its Bridge prefix.
+func KindOf(name string) string {
+	switch {
+	case strings.HasPrefix(name, FolderPrefix):
+		return KindFolder
+	case strings.HasPrefix(name, LabelPrefix):
+		return KindLabel
+	default:
+		return KindSystem
+	}
+}
+
+// KindPrefix returns the Bridge name prefix for a user-creatable kind, or "" for anything else.
+func KindPrefix(kind string) string {
+	switch kind {
+	case KindFolder:
+		return FolderPrefix
+	case KindLabel:
+		return LabelPrefix
+	default:
+		return ""
+	}
+}
 
 // Mailbox is an IMAP folder or label. Counts are nil when the server did not report them.
 type Mailbox struct {
