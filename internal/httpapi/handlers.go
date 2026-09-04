@@ -190,17 +190,7 @@ func (s *server) moveMessages(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) trashMessages(w http.ResponseWriter, r *http.Request) {
-	var req messagesRef
-	if err := decodeJSON(r, &req); err != nil {
-		writeFailure(w, err)
-		return
-	}
-	res, err := s.svc.Trash(r.Context(), req.Mailbox, req.UIDs)
-	if err != nil {
-		writeFailure(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, moveResponse(res))
+	s.handleRoleMove(w, r, s.svc.Trash)
 }
 
 func (s *server) deleteMessages(w http.ResponseWriter, r *http.Request) {
@@ -280,12 +270,41 @@ func mailboxResponse(mb mail.Mailbox) map[string]any {
 }
 
 func (s *server) archiveMessages(w http.ResponseWriter, r *http.Request) {
+	s.handleRoleMove(w, r, s.svc.Archive)
+}
+
+func (s *server) markSpam(w http.ResponseWriter, r *http.Request) {
+	s.handleRoleMove(w, r, s.svc.MarkSpam)
+}
+
+func (s *server) markNotSpam(w http.ResponseWriter, r *http.Request) {
+	s.handleRoleMove(w, r, s.svc.MarkNotSpam)
+}
+
+func (s *server) restoreMessages(w http.ResponseWriter, r *http.Request) {
+	var req moveRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeFailure(w, err)
+		return
+	}
+	res, err := s.svc.Restore(r.Context(), req.Mailbox, req.UIDs, req.Destination)
+	if err != nil {
+		writeFailure(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, moveResponse(res))
+}
+
+type roleMove func(ctx context.Context, mailbox string, uids []uint32) (service.MoveResult, error)
+
+// handleRoleMove serves the tools that move messages into a system mailbox resolved by role.
+func (s *server) handleRoleMove(w http.ResponseWriter, r *http.Request, op roleMove) {
 	var req messagesRef
 	if err := decodeJSON(r, &req); err != nil {
 		writeFailure(w, err)
 		return
 	}
-	res, err := s.svc.Archive(r.Context(), req.Mailbox, req.UIDs)
+	res, err := op(r.Context(), req.Mailbox, req.UIDs)
 	if err != nil {
 		writeFailure(w, err)
 		return

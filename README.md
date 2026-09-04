@@ -28,6 +28,8 @@ running headless in a container next to the tools.
 | `update_message_flags` | Mark read/unread and flagged/unflagged, one or many uids |
 | `move_messages`        | Move to any existing folder |
 | `archive_messages`     | Move to Archive |
+| `mark_spam` / `mark_not_spam` | Move to Spam (reports the sender) / move from Spam back to INBOX |
+| `restore_messages`     | Move out of Trash into INBOX or a chosen folder |
 | `label_messages` / `unlabel_messages` | Add / remove a Proton label (additive tag; the message stays in its folder) |
 | `trash_messages`       | Move to Trash (reversible delete for INBOX, folders, labels) |
 | `delete_messages` / `empty_mailbox` | Permanent deletion — **Spam and Trash only**, off unless `ALLOW_PURGE=true` |
@@ -196,7 +198,7 @@ variables in `.env`).
 | `MAIL_FROM_ADDRESS` | `BRIDGE_USERNAME` | From address for outgoing mail (any address on the account) |
 | `MAIL_FROM_NAME` | *(empty)* | From display name |
 | `ALLOW_SEND` | `true` | Gate `send_message` / `reply_to_message` (403 when false) |
-| `ALLOW_DELETE` | `true` | Gate `trash_messages` and `delete_mailbox` (403 when false) |
+| `ALLOW_DELETE` | `true` | Gate `trash_messages`, `mark_spam` and `delete_mailbox` (403 when false) |
 | `ALLOW_PURGE` | `false` | Gate `delete_messages` / `empty_mailbox` — permanent deletion in Spam and Trash |
 | `MAX_BODY_CHARS` | `20000` | Truncate long bodies for the model |
 | `SEARCH_DEFAULT_LIMIT` | `20` | Results when `limit` is omitted |
@@ -243,6 +245,11 @@ variables in `.env`).
   `trash_messages` for the system mailboxes. All of them look the message up by
   `Message-ID` in the destination first and report already-present / absent uids in
   `skipped_uids`.
+- Triage: `mark_spam` moves to Spam (Proton learns the sender; Spam is purged after 30
+  days, so it shares the `ALLOW_DELETE` gate with trash). `mark_not_spam` and
+  `restore_messages` only accept the Spam and Trash mailboxes respectively as source and
+  move to INBOX, or for restore to a `destination` folder. Proton does not record where a
+  trashed message came from, so restoring to the original folder needs the caller to name it.
 - Mailbox management: `create_mailbox` takes a `kind` (`folder` or `label`) and a bare
   name and returns the exact `Folders/…` / `Labels/…` name; folders may be nested with
   `/`, labels may not. `rename_mailbox` keeps the kind. `delete_mailbox` removes a label

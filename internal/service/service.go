@@ -391,10 +391,8 @@ func (s *Service) mailboxByRole(ctx context.Context, role string) (string, error
 	if err != nil {
 		return "", err
 	}
-	for _, mb := range boxes {
-		if mb.Role == role {
-			return mb.Name, nil
-		}
+	if mb, ok := findByRole(boxes, role); ok {
+		return mb.Name, nil
 	}
 	return "", fmt.Errorf("%w: no mailbox with role %q", mail.ErrMailboxNotFound, role)
 }
@@ -405,12 +403,8 @@ func (s *Service) isPurgeMailbox(ctx context.Context, name string) (bool, error)
 	if err != nil {
 		return false, err
 	}
-	for _, mb := range boxes {
-		if mb.Name == name {
-			return mb.Role == mail.RoleTrash || mb.Role == mail.RoleSpam, nil
-		}
-	}
-	return false, nil
+	mb, ok := findByName(boxes, name)
+	return ok && (mb.Role == mail.RoleTrash || mb.Role == mail.RoleSpam), nil
 }
 
 // BuildReply derives recipients, subject and threading headers from the original.
