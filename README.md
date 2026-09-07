@@ -166,8 +166,10 @@ runs your stack. The steps assume a layout like
 
 ### Updating
 
-- **Tool service:** `git pull` then `docker compose up -d --build proton-mail-tools`
-  (Bridge keeps running).
+- **Tool service:** `git pull` then `docker compose build proton-mail-tools &&
+  docker compose up -d --no-deps proton-mail-tools`. The `--no-deps` matters: because the
+  tool service joins Bridge's network namespace, a plain `up` treats Bridge as a dependency
+  and will recreate it whenever its config hash has drifted, which restarts your sync.
 - **Bridge:** bump `BRIDGE_VERSION` in [`bridge/Dockerfile`](bridge/Dockerfile), then
   `docker compose up -d --build proton-bridge proton-mail-tools` (the tool container is
   recreated because it shares the namespace). Bridge's own auto-updater is irrelevant
