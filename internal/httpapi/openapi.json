@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Proton Mail Tools",
-    "version": "0.4.0",
+    "version": "0.4.1",
     "description": "Tools for reading, searching, sending and organising email in a Proton Mail account via Proton Mail Bridge. Messages are identified by a mailbox name plus a numeric uid returned by search_messages."
   },
   "security": [{"bearerAuth": []}],
