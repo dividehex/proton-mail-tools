@@ -236,7 +236,7 @@ variables in `.env`).
   UID order is not recency).
 - `read_message` uses `BODY.PEEK` — the message stays unread until the agent calls
   `update_message_flags`. Plain-text parts are preferred; HTML is converted to text. Links
-  are stripped from the body text but reported separately in `links` (first 50, with
+  are stripped from the body text but reported separately in `links` (first 200, with
   anchor text), and `List-Unsubscribe` header URLs in `list_unsubscribe`, so the agent can
   find e.g. an unsubscribe link.
 - Organising: `move_messages` for folders (a Proton message lives in exactly one folder),

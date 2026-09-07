@@ -14,8 +14,9 @@ import (
 	"proton-mail-tools/internal/textconv"
 )
 
-// maxLinks caps the hyperlinks reported per message; newsletters can carry hundreds.
-const maxLinks = 50
+// maxLinks caps the hyperlinks reported per message. Job-alert digests wrap every
+// anchor in a tracker and carry ~4 links per job, so 50 hid most of a 24-job digest.
+const maxLinks = 200
 
 // parseBody extracts the best plain-text body, References, List-Unsubscribe,
 // hyperlinks and attachment metadata from a raw RFC 5322 message into msg.
